@@ -9,14 +9,14 @@
 // captain-facing contract and docs/calm-mode-feasibility.md the version-scoped evidence.
 //
 // This file is the only place the engine interface `$` is touched: the geometry lives
-// in ../lib/fm-calm-working-ship-sprite.ts (shared with the Pi extension), the Raster
+// in ../lib/fm-calm-clawd-sprite.ts, the Raster
 // packing in ../lib/fm-calm-ship-raster.ts, and every visibility decision in
 // ../lib/fm-calm-presentation.ts, so the policy is testable under Node and the engine
 // glue under `claude plugin test`. Nothing here rewrites a message: `ui.render` changes
 // drawings and leaves the stored transcript, model context, and session storage alone.
 //
 // Presentation while Calm is on, sharing Pi Calm's goals where the mods API allows:
-// the stock working row (`Spinner`) becomes the two-row sailboat, repainted through
+// the stock working row (`Spinner`) becomes a three-row running Clawd, repainted through
 // `$.ui.blit` on the sprite's own tick; `ToolUse`, `ToolResult`, and `ToolGroup` rows
 // draw as zero-height boxes; a `UserMessage` whose text the canonical operational-input
 // classifier recognizes, or a record-backed doorbell whose record holds a current
@@ -24,7 +24,7 @@
 // draws as zero height; an `AssistantMessage` block recorded as a mid-turn working note
 // draws as zero height. Calm off returns every drawing to the
 // engine. A toggle invalidates every hooked drawing, so rows already on screen redraw.
-// The boat is painted in Claude Code's own theme colors: the family is read from the
+// Clawd is painted in Claude Code's own theme colors: the family is read from the
 // `theme` setting at load and re-read when a `config.set` changes it.
 //
 // Supervision notes, whether Calm is on or off, as Pi shows them regardless of Calm: a
@@ -42,9 +42,9 @@
 // Each `session.start` clears presentation classifications and reloads the new session.
 import type { EngineInterface, Register, RenderElement, RenderInput } from "claude-code";
 import {
-  CALM_WORKING_SHIP_TICK_MS,
-  createCalmWorkingShipSprite,
-} from "../lib/fm-calm-working-ship-sprite.ts";
+  CALM_CLAWD_TICK_MS,
+  createCalmClawdSprite,
+} from "../lib/fm-calm-clawd-sprite.ts";
 import {
   CALM_SHIP_RASTER_KEY,
   CALM_SHIP_RASTER_PALETTES,
@@ -92,7 +92,7 @@ const finalReplies = new Set<string>();
 // Each doorbell's record verdict, by record path. Records are immutable once published
 // but pruned after seven days, so every invalidation drops the cache and rechecks.
 const doorbellVerdicts = new Map<string, Promise<boolean>>();
-const sprite = createCalmWorkingShipSprite();
+const sprite = createCalmClawdSprite();
 let palette: CalmShipRasterPalette = CALM_SHIP_RASTER_PALETTES.light;
 // Every Spinner site currently drawing the boat, by its requestId, with the mounted
 // Raster size a blit must repeat exactly.
@@ -176,7 +176,7 @@ async function load($: EngineInterface): Promise<void> {
     // A transcript that cannot be read leaves restored narration visible; nothing else changes.
   }
   if (ticker === undefined) {
-    ticker = $.clock.every(CALM_WORKING_SHIP_TICK_MS, () => {
+    ticker = $.clock.every(CALM_CLAWD_TICK_MS, () => {
       void repaintShip($);
     });
   }

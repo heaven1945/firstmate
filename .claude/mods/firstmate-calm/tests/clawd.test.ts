@@ -1,64 +1,61 @@
-// firstmate-calm under `claude plugin test`: the sailboat that replaces the stock
-// working row while Calm is on, its cadence on the mocked clock, its size against the
-// viewport, and how it lets go of a site the surface no longer draws.
+// firstmate-calm under `claude plugin test`: the running Clawd that replaces the stock
+// working row while Calm is on, its back-and-forth on the mocked clock, its size against
+// the viewport, and how it lets go of a site the surface no longer draws.
 import { describe, expect, test } from "claude-code/testing";
+import { CALM_CLAWD_BODY, CALM_CLAWD_LEGS, CALM_CLAWD_TICK_MS as TICK } from "../lib/fm-calm-clawd-sprite.ts";
 import { calmCommand, decodeCells, isStock, rasterOf, spinner, themeChange, unmeasuredSpinner, world } from "./support.ts";
 
-const SAIL = "◿│◣";
-const HULL = "╲▁▁▁╱";
+const WIDTH = 9;
+const ROWS = 3;
 const DEFAULT = 0x01000000;
-// Claude Code's own theme tables: the spinner blue of each family for the water and
-// the Claude orange of the stock spinner for the boat.
-const DARK_WATER = 0x93a5ff;
-const LIGHT_WATER = 0x5769f7;
-const BOAT = 0xd77757;
-const TICK = 220;
-const TICKS_PER_MOVE = 4;
+// Claude Code's own theme tables: the spinner blue of each family for the ground and
+// the Claude orange of the stock spinner for Clawd.
+const DARK_GROUND = 0x93a5ff;
+const LIGHT_GROUND = 0x5769f7;
+const BODY = 0xd77757;
 
-describe("the working ship", () => {
-  test("replaces the spinner with a two-row raster sized to the row inside the transcript margin", async ($, on) => {
+/** The three rows as drawn with Clawd `x` columns from the left edge. */
+function clawd(width: number, x: number, legs: 0 | 1): string[] {
+  const rest = width - x - WIDTH;
+  return [
+    " ".repeat(x) + CALM_CLAWD_BODY[0] + " ".repeat(rest),
+    " ".repeat(x) + CALM_CLAWD_BODY[1] + " ".repeat(rest),
+    "▁".repeat(x) + CALM_CLAWD_LEGS[legs].replaceAll(" ", "▁") + "▁".repeat(rest),
+  ];
+}
+
+describe("the running Clawd", () => {
+  test("replaces the spinner with a three-row raster sized to the row inside the transcript margin", async ($, on) => {
     world(on, { preference: "on\n" });
     const raster = rasterOf(await $.ui.render(spinner("agent-main", { columns: 40, rows: 24 })));
     expect(raster).toBeDefined();
     expect(raster!.key).toBe("firstmate-calm-working-ship");
     expect(raster!.columns).toBe(38);
-    expect(raster!.rows).toBe(2);
-    const { glyphs, foregrounds, backgrounds } = decodeCells(raster!.cells, 38, 2);
-    expect(glyphs[0]).toHaveLength(38);
-    expect(glyphs[1]).toHaveLength(38);
-    // The boat starts at the left edge: hull at column 0, sail centered one column in.
-    expect(glyphs[1]!.indexOf(HULL)).toBe(0);
-    expect(glyphs[0]!.indexOf(SAIL)).toBe(1);
-    expect(glyphs[0]!.slice(4)).toBe(" ".repeat(34));
-    expect(glyphs[1]!.replace(HULL, "▁▁▁▁▁")).toMatch(/^[▁▂▃▄]+$/);
-    // Colors on the default dark theme: the whole boat one Claude orange (both sail halves,
-    // mast, and the complete hull including its interior), every water cell the dark
-    // spinner blue whatever its height, default-colored padding, default backgrounds.
-    expect(foregrounds[1]!.slice(0, 5)).toEqual([BOAT, BOAT, BOAT, BOAT, BOAT]);
-    expect(foregrounds[0]!.slice(1, 4)).toEqual([BOAT, BOAT, BOAT]);
-    expect(foregrounds[0]![0]).toBe(DEFAULT);
-    expect(foregrounds[0]!.slice(4).every((color) => color === DEFAULT)).toBe(true);
-    expect(foregrounds[1]!.slice(5).every((color) => color === DARK_WATER)).toBe(true);
-    expect(glyphs[1]!.slice(5)).toMatch(/[▃▄]/);
+    expect(raster!.rows).toBe(ROWS);
+    const { glyphs, foregrounds, backgrounds } = decodeCells(raster!.cells, 38, ROWS);
+    expect(glyphs).toEqual(clawd(38, 0, 0));
+    expect(foregrounds[1]!.slice(0, WIDTH).every((color) => color === BODY)).toBe(true);
+    expect(foregrounds[2]![0]).toBe(DARK_GROUND);
+    expect(foregrounds[2]![2]).toBe(BODY);
+    expect(foregrounds[2]!.slice(WIDTH).every((color) => color === DARK_GROUND)).toBe(true);
     expect(backgrounds.flat().every((color) => color === DEFAULT)).toBe(true);
   });
 
-  test("animates the water every tick and moves the hull one column every fourth, through blits of the mounted size", async ($, on) => {
+  test("runs one column every tick to the right edge and back, swapping legs, through blits of the mounted size", async ($, on) => {
     const { clock, journal } = world(on, { preference: "on\n" });
     await $.session.start({ cwd: "/work", surface: "terminal", isInteractive: true });
-    const raster = rasterOf(await $.ui.render(spinner("agent-main", { columns: 40, rows: 24 })))!;
-    const first = decodeCells(raster.cells, 38, 2);
+    await $.ui.render(spinner("agent-main", { columns: 40, rows: 24 }));
     await clock.advance(TICK);
     expect(journal.blits).toHaveLength(1);
-    expect(journal.blits[0]).toMatchObject({ requestId: "agent-main", key: "firstmate-calm-working-ship", columns: 38, rows: 2 });
-    const afterOne = decodeCells(journal.blits[0]!.cells, 38, 2);
-    expect(afterOne.glyphs[1]!.indexOf(HULL)).toBe(0);
-    expect(afterOne.glyphs[1]).not.toBe(first.glyphs[1]);
-    await clock.advance(TICK * (TICKS_PER_MOVE - 1));
-    expect(journal.blits).toHaveLength(TICKS_PER_MOVE);
-    const afterMove = decodeCells(journal.blits[TICKS_PER_MOVE - 1]!.cells, 38, 2);
-    expect(afterMove.glyphs[1]!.indexOf(HULL)).toBe(1);
-    expect(afterMove.glyphs[0]!.indexOf(SAIL)).toBe(2);
+    expect(journal.blits[0]).toMatchObject({ requestId: "agent-main", key: "firstmate-calm-working-ship", columns: 38, rows: ROWS });
+    expect(decodeCells(journal.blits[0]!.cells, 38, ROWS).glyphs).toEqual(clawd(38, 1, 1));
+    const span = 38 - WIDTH;
+    await clock.advance(TICK * (span - 1));
+    expect(decodeCells(journal.blits.at(-1)!.cells, 38, ROWS).glyphs).toEqual(clawd(38, span, 1));
+    await clock.advance(TICK);
+    expect(decodeCells(journal.blits.at(-1)!.cells, 38, ROWS).glyphs).toEqual(clawd(38, span - 1, 0));
+    await clock.advance(TICK * (span - 1));
+    expect(decodeCells(journal.blits.at(-1)!.cells, 38, ROWS).glyphs).toEqual(clawd(38, 0, 0));
   });
 
   test("stops blitting a site the surface denies and resumes when the spinner is drawn again", async ($, on) => {
@@ -92,32 +89,28 @@ describe("the working ship", () => {
     expect(journal.blits).toHaveLength(1);
   });
 
-  test("sizes to the raster limits: an unmeasured viewport reads as 80 columns, a wide one clips at 512, a narrow one falls back to one row", async ($, on) => {
+  test("sizes to the raster limits: an unmeasured viewport reads as 80 columns, a wide one clips at 512, a narrow one clips Clawd", async ($, on) => {
     world(on, { preference: "on\n" });
     expect(rasterOf(await $.ui.render(unmeasuredSpinner("a")))!.columns).toBe(78);
     expect(rasterOf(await $.ui.render(spinner("b", { columns: 900, rows: 40 })))!.columns).toBe(512);
-    const narrow = rasterOf(await $.ui.render(spinner("c", { columns: 5, rows: 40 })))!;
-    expect(narrow.columns).toBe(3);
-    expect(narrow.rows).toBe(1);
-    expect(decodeCells(narrow.cells, 3, 1).glyphs[0]).toBe(SAIL);
-    const tiny = rasterOf(await $.ui.render(spinner("d", { columns: 2, rows: 40 })))!;
-    expect(tiny.columns).toBe(1);
-    expect(tiny.rows).toBe(1);
-    expect(decodeCells(tiny.cells, 1, 1).glyphs[0]).toMatch(/^[▁▂▃▄]$/);
+    const narrow = rasterOf(await $.ui.render(spinner("c", { columns: 7, rows: 40 })))!;
+    expect(narrow.columns).toBe(5);
+    expect(narrow.rows).toBe(ROWS);
+    expect(decodeCells(narrow.cells, 5, ROWS).glyphs).toEqual(clawd(WIDTH, 0, 0).map((row) => row.slice(0, 5)));
   });
 
   test("reflows to a new width on the redraw a resize causes, and blits at that width from then on", async ($, on) => {
     const { clock, journal } = world(on, { preference: "on\n" });
     await $.session.start({ cwd: "/work", surface: "terminal", isInteractive: true });
     await $.ui.render(spinner("agent-main", { columns: 80, rows: 24 }));
-    await clock.advance(TICK * TICKS_PER_MOVE * 6);
-    const wide = decodeCells(journal.blits.at(-1)!.cells, 78, 2);
-    expect(wide.glyphs[1]!.indexOf(HULL)).toBe(6);
+    await clock.advance(TICK * 6);
+    expect(decodeCells(journal.blits.at(-1)!.cells, 78, ROWS).glyphs).toEqual(clawd(78, 6, 0));
+    // A 12-column row leaves Clawd 1 free column; step 6 bounces back to the left edge.
     const shrunk = rasterOf(await $.ui.render(spinner("agent-main", { columns: 12, rows: 24 })))!;
     expect(shrunk.columns).toBe(10);
-    expect(decodeCells(shrunk.cells, 10, 2).glyphs[1]!.indexOf(HULL)).toBe(5);
+    expect(decodeCells(shrunk.cells, 10, ROWS).glyphs).toEqual(clawd(10, 0, 0));
     await clock.advance(TICK);
-    expect(journal.blits.at(-1)).toMatchObject({ columns: 10, rows: 2 });
+    expect(journal.blits.at(-1)).toMatchObject({ columns: 10, rows: ROWS });
   });
 
   test("leaves a non-terminal surface to the engine", async ($, on) => {
@@ -128,30 +121,22 @@ describe("the working ship", () => {
     expect(journal.blits).toHaveLength(0);
   });
 
-  test("paints the light theme family's spinner blue for the water and the same Claude orange boat", async ($, on) => {
-    world(on, { preference: "on\n", theme: "light" });
-    const raster = rasterOf(await $.ui.render(spinner("agent-main", { columns: 40, rows: 24 })))!;
-    const { foregrounds } = decodeCells(raster.cells, 38, 2);
-    expect(foregrounds[1]!.slice(0, 5)).toEqual([BOAT, BOAT, BOAT, BOAT, BOAT]);
-    expect(foregrounds[1]!.slice(5).every((color) => color === LIGHT_WATER)).toBe(true);
-  });
-
   // Each theme value needs its own world, so the family rule gets one test per value.
   for (const [theme, expected, family] of [
-    ["dark-ansi", DARK_WATER, "dark"],
-    ["dark-daltonized", DARK_WATER, "dark"],
-    ["light", LIGHT_WATER, "light"],
-    ["light-daltonized", LIGHT_WATER, "light"],
-    ["light-ansi", LIGHT_WATER, "light"],
-    ["auto", LIGHT_WATER, "light"],
-    ["custom:rose-pine", LIGHT_WATER, "light"],
+    ["light", LIGHT_GROUND, "light"],
+    ["dark-ansi", DARK_GROUND, "dark"],
+    ["dark-daltonized", DARK_GROUND, "dark"],
+    ["light-daltonized", LIGHT_GROUND, "light"],
+    ["light-ansi", LIGHT_GROUND, "light"],
+    ["auto", LIGHT_GROUND, "light"],
+    ["custom:rose-pine", LIGHT_GROUND, "light"],
   ] as const) {
     test(`paints the ${family} family for the theme value ${JSON.stringify(theme)}`, async ($, on) => {
       world(on, { preference: "on\n", theme });
       const raster = rasterOf(await $.ui.render(spinner("agent-main", { columns: 40, rows: 24 })))!;
-      const { foregrounds } = decodeCells(raster.cells, 38, 2);
-      expect(foregrounds[1]!.slice(5).every((color) => color === expected)).toBe(true);
-      expect(foregrounds[1]![0]).toBe(BOAT);
+      const { foregrounds } = decodeCells(raster.cells, 38, ROWS);
+      expect(foregrounds[2]!.slice(WIDTH).every((color) => color === expected)).toBe(true);
+      expect(foregrounds[1]![0]).toBe(BODY);
     });
   }
 
@@ -160,15 +145,15 @@ describe("the working ship", () => {
     await $.session.start({ cwd: "/work", surface: "terminal", isInteractive: true });
     await $.ui.render(spinner("agent-main", { columns: 40, rows: 24 }));
     await clock.advance(TICK);
-    expect(decodeCells(journal.blits.at(-1)!.cells, 38, 2).foregrounds[1]!.at(-1)).toBe(DARK_WATER);
+    expect(decodeCells(journal.blits.at(-1)!.cells, 38, ROWS).foregrounds[2]!.at(-1)).toBe(DARK_GROUND);
     const redrawsBefore = journal.invalidations.length;
     const changed = await $.config.set(themeChange("light", "dark"));
     expect(changed.value).toBe("light");
     expect(journal.invalidations.length).toBe(redrawsBefore + 1);
     await clock.advance(TICK);
-    expect(decodeCells(journal.blits.at(-1)!.cells, 38, 2).foregrounds[1]!.at(-1)).toBe(LIGHT_WATER);
+    expect(decodeCells(journal.blits.at(-1)!.cells, 38, ROWS).foregrounds[2]!.at(-1)).toBe(LIGHT_GROUND);
     const raster = rasterOf(await $.ui.render(spinner("agent-main", { columns: 40, rows: 24 })))!;
-    expect(decodeCells(raster.cells, 38, 2).foregrounds[1]!.at(-1)).toBe(LIGHT_WATER);
+    expect(decodeCells(raster.cells, 38, ROWS).foregrounds[2]!.at(-1)).toBe(LIGHT_GROUND);
     // A change within the same family redraws nothing.
     const redrawsAfter = journal.invalidations.length;
     await $.config.set(themeChange("light-ansi", "light"));
@@ -183,6 +168,6 @@ describe("the working ship", () => {
     expect(journal.invalidations.length).toBe(redrawsBefore);
     await $.command.run(calmCommand());
     const raster = rasterOf(await $.ui.render(spinner("agent-main", { columns: 40, rows: 24 })))!;
-    expect(decodeCells(raster.cells, 38, 2).foregrounds[1]!.at(-1)).toBe(LIGHT_WATER);
+    expect(decodeCells(raster.cells, 38, ROWS).foregrounds[2]!.at(-1)).toBe(LIGHT_GROUND);
   });
 });
